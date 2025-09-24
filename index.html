@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Rice University Campus Map — Use Mode</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    :root { --marker-bg: rgba(59,130,246,0.72); --marker-hover: rgba(16,185,129,0.85); }
+    body {
+      font-family: 'Inter', sans-serif;
+      margin: 0;
+      padding: 20px;
+      min-height: 100vh;
+      background: linear-gradient(135deg, #0f172a, #3b0d0d);
+      color: white;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .header { text-align: center; margin-bottom: 18px; }
+    .map-section {
+      background: #fff;
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.45);
+      position: relative;
+    }
+    .campus-image {
+      width: 100%;
+      height: auto;
+      border-radius: 10px;
+      display: block;
+      user-select: none;
+    }
+
+    /* marker styling: smaller, brighter, semi-transparent */
+    .mapped-building {
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      background: var(--marker-bg);
+      border: 2px solid rgba(255,255,255,0.95);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: 700;
+      font-size: 9px;
+      cursor: pointer;
+      transform: translate(-50%,-50%);
+      box-shadow: 0 6px 16px rgba(0,0,0,0.25);
+      z-index: 12;
+      transition: transform 0.14s ease, background 0.14s ease, box-shadow 0.14s ease;
+      backdrop-filter: blur(2px);
+      opacity: 0.95;
+    }
+    .mapped-building:hover {
+      transform: translate(-50%,-50%) scale(1.35);
+      background: var(--marker-hover);
+      box-shadow: 0 10px 26px rgba(0,0,0,0.32);
+    }
+
+    /* info boxes */
+    .info-box {
+      position: absolute;
+      width: 300px;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #ffffff;
+      color: #0f172a;
+      box-shadow: 0 18px 40px rgba(2,6,23,0.45);
+      z-index: 2000;
+      cursor: grab;
+      user-select: none;
+    }
+    .info-box:active { cursor: grabbing; }
+    .info-box-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 14px;
+      background: linear-gradient(135deg,#2563eb,#1e40af);
+      color: #fff;
+      font-weight: 700;
+    }
+    .info-box-body {
+      padding: 12px 14px 16px;
+      font-size: 14px;
+      line-height: 1.35;
+    }
+    .info-label { font-weight: 600; color: #374151; }
+    .close-btn {
+      background: rgba(255,255,255,0.16);
+      border: none;
+      color: white;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+    }
+
+    /* small responsive adjustments */
+    @media (max-width: 640px) {
+      .info-box { width: 86vw; left: 7vw !important; }
+      .mapped-building { width: 16px; height: 16px; font-size: 8px;}
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1 class="text-3xl font-bold">📍 Rice University — Campus Map</h1>
+      <p class="opacity-80">Click any marker to open details. Multiple info boxes are allowed and draggable.</p>
+    </div>
+
+    <div class="map-section" id="mapSection" style="min-height:640px;">
+      <img id="campusMap" class="campus-image" src="Rice_Campus_Map.png"
+           alt="Rice University Campus Map"
+           onerror="this.onerror=null;this.src='https://placehold.co/1200x900/e2e8f0/64748b?text=Rice+University+Campus+Map';">
+    </div>
+  </div>
+
+  <script>
+    /******************************************************
+     * Full inline JSON: buildings present in the legend
+     * Every building has: name, size, description, x, y
+     * 11 and 38 were removed earlier (not in legend) — so omitted here.
+     ******************************************************/
+    const buildingData = {
+      "1":  { "name":"Lovett Hall (Admission Office, Welcome Center)","size":"N/A","description":"Description coming soon.","x":72.06989411384829,"y":32.921067801624226},
+      "2":  { "name":"Maxfield Hall (Robert and Katherine)","size":"N/A","description":"Description coming soon.","x":67.28494951801916,"y":19.36533362848714},
+      "3":  { "name":"Will Rice College","size":"N/A","description":"Description coming soon.","x":61.74731346868699,"y":45.47395233907701},
+      "4":  { "name":"Herzstein Hall","size":"N/A","description":"Description coming soon.","x":68.9534931798135,"y":31.016029676636236},
+      "5":  { "name":"Baker College","size":"N/A","description":"Description coming soon.","x":62.82391209756174,"y":41.72833416545858},
+      "6":  { "name":"Hanszen College","size":"N/A","description":"Description coming soon.","x":56.4215555498677,"y":45.12205013710279},
+      "7":  { "name":"Holloway Field (Wendel D. Ley Track)","size":"N/A","description":"Description coming soon.","x":44.63214505103327,"y":56.10213960138404},
+      "8":  { "name":"Keck Hall","size":"N/A","description":"Description coming soon.","x":64.93872365643901,"y":24.704539604676658},
+      "9":  { "name":"Cohen House (Robert and Agnes)","size":"N/A","description":"Description coming soon.","x":71.59151138797884,"y":41.19297316926377},
+      "10": { "name":"Anderson Hall (Dean, Architecture)","size":"N/A","description":"Description coming soon.","x":64.05495920488912,"y":29.275696444508746},
+      "12": { "name":"Fondren Library","size":"N/A","description":"Description coming soon.","x":61.8406480358493,"y":32.966868962277026},
+      "13": { "name":"Huff House (Peter and Nancy, Alumni Affairs)","size":"N/A","description":"Description coming soon.","x":80.56451612903226,"y":28.218054497414535},
+      "14": { "name":"Tudor Fieldhouse and Youngkin Center (Autry Court, Fox Gymnasium)","size":"N/A","description":"Description coming soon.","x":42.93010834724672,"y":40.35596764519946},
+      "15": { "name":"Rice Stadium","size":"N/A","description":"Description coming soon.","x":25.618279980074977,"y":23.584211534097356},
+      "16": { "name":"Jones College (Mary Gibbs)","size":"N/A","description":"Description coming soon.","x":78.46774193548387,"y":20.368183264171435},
+      "17": { "name":"Will Rice College Magisters’ House","size":"N/A","description":"Description coming soon.","x":60.45699088804184,"y":41.53172413723233},
+      "18": { "name":"Multicultural Center","size":"N/A","description":"Description coming soon.","x":60.779571533203125,"y":38.696082086528016},
+      "19": { "name":"Housing and Dining Offices","size":"N/A","description":"Description coming soon.","x":58.198926371912805,"y":39.041895799225166},
+      "20": { "name":"Rich Student Health Center (Morton L.)","size":"N/A","description":"Description coming soon.","x":57.91939027847782,"y":49.307096728358324},
+      "21": { "name":"Rice Memorial Center (Ley Student Center, Bookstore, Chapel)","size":"N/A","description":"Description coming soon.","x":54.40860379126764,"y":30.22375376878313},
+      "22": { "name":"Anderson Biological Laboratories","size":"N/A","description":"Description coming soon.","x":54.86559467930947,"y":25.34783994018576},
+      "23": { "name":"Keith-Wiess Geological Laboratories","size":"N/A","description":"Description coming soon.","x":56.048387096774185,"y":21.785997957562692},
+      "24": { "name":"Hamman Hall","size":"N/A","description":"Description coming soon.","x":59.34624456590222,"y":18.861746445996985},
+      "25": { "name":"Rayzor Hall","size":"N/A","description":"Description coming soon.","x":65.27903553417926,"y":35.926649293875506},
+      "26": { "name":"Facilities Engineering and Planning","size":"N/A","description":"Description coming soon.","x":70.30488967895508,"y":13.98539887807784},
+      "27": { "name":"Ryon Engineering Laboratory","size":"N/A","description":"Description coming soon.","x":64.24193351499497,"y":18.717258615345695},
+      "28": { "name":"Brown College (Margarett Root)","size":"N/A","description":"Description coming soon.","x":82.4462398405998,"y":23.89544007634825},
+      "29": { "name":"Brown College Magisters’ House","size":"N/A","description":"Description coming soon.","x":81.63978822769657,"y":24.932868550517902},
+      "30": { "name":"Morton L. Rich Health and Wellness Center","size":"N/A","description":"Description coming soon.","x":83.70967741935483,"y":26.07403987210452},
+      "31": { "name":"Oshman Engineering Design Kitchen","size":"N/A","description":"Description coming soon.","x":63.064516129032256,"y":14.731484333209059},
+      "32": { "name":"Space Science and Technology Building","size":"N/A","description":"Description coming soon.","x":55.403225806451616,"y":19.088683924721597},
+      "33": { "name":"Allen Business Center (President’s Office)","size":"N/A","description":"Description coming soon.","x":68.68279733965473,"y":39.9409962555316},
+      "34": { "name":"Brown Hall for Mathematical Sciences (Herman)","size":"N/A","description":"Description coming soon.","x":62.39247475900957,"y":21.993483652396623},
+      "35": { "name":"Lovett College (Edgar Odell)","size":"N/A","description":"Description coming soon.","x":66.18279733965474,"y":45.19730896727238},
+      "36": { "name":"Greenbriar Building","size":"N/A","description":"Description coming soon.","x":12.66128907615523,"y":17.75377788556183},
+      "39": { "name":"Sewall Hall","size":"N/A","description":"Description coming soon.","x":70.3094482421875,"y":36.03674538688096},
+      "40": { "name":"Mudd Computer Science Building","size":"N/A","description":"Description coming soon.","x":62.355137486611646,"y":18.73542501232358},
+      "41": { "name":"Herring Hall (Robert R.)","size":"N/A","description":"Description coming soon.","x":55.66802922717391,"y":37.12733877307873},
+      "42": { "name":"Mechanical Engineering Building","size":"N/A","description":"Description coming soon.","x":64.51612903225806,"y":21.751419119077337},
+      "43": { "name":"Rice University Police Department","size":"N/A","description":"Description coming soon.","x":29.247313468686997,"y":40.701781357896614},
+      "44": { "name":"Brown Hall (Alice Pratt)","size":"N/A","description":"Description coming soon.","x":40.618281210622484,"y":32.64441809785868},
+      "45": { "name":"Brown Hall (George R.)","size":"N/A","description":"Description coming soon.","x":59.2741935483871,"y":25.00202622748861},
+      "46": { "name":"Duncan Hall (Anne and Charles)","size":"N/A","description":"Description coming soon.","x":70.21505540417087,"y":25.52074046457344},
+      "47": { "name":"Baker Hall (James A. III, Public Policy)","size":"N/A","description":"Description coming soon.","x":49.699136086825845,"y":36.06089497069473},
+      "48": { "name":"Butcher Hall (Dell)","size":"N/A","description":"Description coming soon.","x":52.5217164541216,"y":20.273557156739514},
+      "49": { "name":"Humanities Building","size":"N/A","description":"Description coming soon.","x":62.19913485627846,"y":36.33258673187066},
+      "50": { "name":"Reckling Park at Cameron Field","size":"N/A","description":"Description coming soon.","x":39.33588932791538,"y":44.73338868733203},
+      "51": { "name":"Wiess College","size":"N/A","description":"Description coming soon.","x":53.771371777799374,"y":47.48509409008366},
+      "52": { "name":"South Servery","size":"N/A","description":"Description coming soon.","x":54.01330723785329,"y":45.02498813232303},
+      "53": { "name":"Martel College (Marian Fox and Speros P.)","size":"N/A","description":"Description coming soon.","x":78.03562503587045,"y":17.108653339536122},
+      "54": { "name":"Martel College Magisters’ House","size":"N/A","description":"Description coming soon.","x":77.63239926911392,"y":14.75437343762832},
+      "55": { "name":"Jones College Magisters’ House","size":"N/A","description":"Description coming soon.","x":77.79831151179046,"y":22.478016541233696},
+      "56": { "name":"North Servery","size":"N/A","description":"Description coming soon.","x":81.02411764584275,"y":20.914440206885413},
+      "57": { "name":"McNair Hall (Business)","size":"N/A","description":"Description coming soon.","x":50.148807634040324,"y":30.44927096022978},
+      "58": { "name":"Wiess President’s House","size":"N/A","description":"Description coming soon.","x":90.32794583228326,"y":29.7467228303156},
+      "59": { "name":"Greenhouse","size":"N/A","description":"Description coming soon.","x":52.18332106067288,"y":23.35222748253392},
+      "60": { "name":"Rice Children’s Campus","size":"N/A","description":"Description coming soon.","x":8.870967741935484,"y":14.005284401290302},
+      "61": { "name":"Brochstein Pavilion (Raymond and Susan)","size":"N/A","description":"Description coming soon.","x":58.353015530493956,"y":33.38721831719665},
+      "62": { "name":"Gibbs Recreation and Wellness Center","size":"N/A","description":"Description coming soon.","x":49.11591068390877,"y":24.873941747356422},
+      "63": { "name":"BioScience Research Collaborative","size":"N/A","description":"Description coming soon.","x":41.253150201612904,"y":65.7104519835721},
+      "64": { "name":"South Plant","size":"N/A","description":"Description coming soon.","x":60.0,"y":50.0},
+      "65": { "name":"McMurtry College","size":"N/A","description":"Description coming soon.","x":74.19354838709677,"y":25.105769074905577},
+      "66": { "name":"McMurtry College Magisters’ House","size":"N/A","description":"Description coming soon.","x":72.31182959771925,"y":22.8580116021786},
+      "67": { "name":"Duncan College (Anne and Charles)","size":"N/A","description":"Description coming soon.","x":74.30107855027723,"y":16.944669299411583},
+      "68": { "name":"Duncan College Magisters’ House","size":"N/A","description":"Description coming soon.","x":72.15053927513861,"y":19.088683924721597},
+      "69": { "name":"West Servery","size":"N/A","description":"Description coming soon.","x":72.28494951801915,"y":20.74856948339304},
+      "70": { "name":"Seibel Servery (Abe and Annie)","size":"N/A","description":"Description coming soon.","x":64.22043338898689,"y":47.7908801526965},
+      "71": { "name":"Wilson House (Wiess College Magisters)","size":"N/A","description":"Description coming soon.","x":54.51039423686422,"y":50.80259504020035},
+      "72": { "name":"Brockman Hall for Physics","size":"N/A","description":"Description coming soon.","x":58.89785274382561,"y":21.509354585758054},
+      "73": { "name":"Turrell Skyspace at Booth Pavilion","size":"N/A","description":"Description coming soon.","x":43.52150701707409,"y":33.05939581948745},
+      "74": { "name":"Anderson-Clarke Center (Glasscock School of Continuing Studies)","size":"N/A","description":"Description coming soon.","x":30.852995841733872,"y":37.83305241590571},
+      "75": { "name":"Brown Tennis Center (George R.)","size":"N/A","description":"Description coming soon.","x":32.41935483870968,"y":16.598855586714432},
+      "76": { "name":"Patterson Sports Performance Center (Brian)","size":"N/A","description":"Description coming soon.","x":27.843199699155747,"y":17.67910078050283},
+      "77": { "name":"Moody Center for the Arts","size":"N/A","description":"Description coming soon.","x":35.32258064516129,"y":42.84579598320663},
+      "78": { "name":"Cambridge Office Building","size":"N/A","description":"Description coming soon.","x":67.98387096774194,"y":43.53742340860093},
+      "79": { "name":"Central Plant","size":"N/A","description":"Description coming soon.","x":66.85483870967742,"y":17.740026908301047},
+      "80": { "name":"Kraft Hall for Social Sciences","size":"N/A","description":"Description coming soon.","x":49.408603791267645,"y":38.938152951808206},
+      "81": { "name":"Brockman Hall for Opera","size":"N/A","description":"Description coming soon.","x":36.774193548387096,"y":32.921067801624226},
+      "82": { "name":"Sid Richardson College","size":"N/A","description":"Description coming soon.","x":62.903225806451616,"y":50.211538149811155},
+      "83": { "name":"Waltrip Indoor Training Center","size":"N/A","description":"Description coming soon.","x":18.31119291244015,"y":17.013787907310483},
+      "84": { "name":"Provisional Campus Facilities (1–4)","size":"N/A","description":"Description coming soon.","x":54.35483870967742,"y":40.77093903486732},
+      "85": { "name":"Hanszen College Magisters’ House","size":"N/A","description":"Description coming soon.","x":58.279571533203125,"y":41.6354669846493},
+      "86": { "name":"O’Connor Building for Engineering and Science (Ralph S.)","size":"N/A","description":"Description coming soon.","x":69.91935483870968,"y":20.956055178226972},
+      "87": { "name":"Cannady Hall (William T.)","size":"N/A","description":"Description coming soon.","x":61.74731346868699,"y":29.947104065017587},
+      "88": { "name":"West Lot 5 MB1–MB6","size":"N/A","description":"Description coming soon.","x":26.96236641176285,"y":37.00162402133213},
+      "89": { "name":"Sarofim Hall (Susan and Fayez)","size":"N/A","description":"Description coming soon.","x":33.817205121440274,"y":45.33562432121379},
+      "90": { "name":"5555 Morningside (Off-campus)","size":"N/A","description":"Description coming soon.","x":6.612903225806452,"y":13.936126724319593}
+    };
+
+    /*********************************************************
+     * RENDER MARKERS
+     *********************************************************/
+    function renderMarkers() {
+      const mapSection = document.getElementById('mapSection');
+
+      Object.entries(buildingData).forEach(([id, b]) => {
+        const marker = document.createElement('div');
+        marker.className = 'mapped-building';
+        marker.textContent = id;
+        marker.setAttribute('data-id', id);
+        marker.style.left = `${b.x}%`;
+        marker.style.top = `${b.y}%`;
+
+        // Click opens info box (allow multiple)
+        marker.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          openInfoBox(id, b, ev.clientX + window.scrollX, ev.clientY + window.scrollY);
+        });
+
+        mapSection.appendChild(marker);
+      });
+    }
+
+    /*********************************************************
+     * INFO BOX: create, show, draggable, closable
+     *********************************************************/
+    function openInfoBox(id, building, pageX, pageY) {
+      // create box container
+      const box = document.createElement('div');
+      box.className = 'info-box';
+      // initial placement near click, but keep inside viewport later
+      const left = Math.min(Math.max(12, pageX - 120), window.innerWidth - 320);
+      const top  = Math.min(Math.max(60, pageY - 80), window.innerHeight - 140);
+      box.style.left = left + 'px';
+      box.style.top  = top  + 'px';
+
+      // inner HTML
+      box.innerHTML = `
+        <div class="info-box-header" draggable="false">
+          <div style="flex:1; padding-right:8px; font-size:14px; line-height:1.1;">${id}: ${escapeHtml(building.name)}</div>
+          <button class="close-btn" title="Close">&times;</button>
+        </div>
+        <div class="info-box-body">
+          <p><span class="info-label">Size:</span> ${escapeHtml(building.size || 'N/A')}</p>
+          <p style="margin-top:8px;"><span class="info-label">Description:</span> ${escapeHtml(building.description || 'Description coming soon.')}</p>
+        </div>
+      `;
+
+      // close
+      box.querySelector('.close-btn').addEventListener('click', () => box.remove());
+
+      // add to document
+      document.body.appendChild(box);
+
+      // make draggable (header drag)
+      makeElementDraggable(box);
+
+      // bring box to front on mousedown
+      box.addEventListener('mousedown', () => bringToFront(box));
+      return box;
+    }
+
+    // Utility: escape HTML for safety
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    }
+
+    // z-index management
+    let zCounter = 3000;
+    function bringToFront(el) {
+      zCounter += 1;
+      el.style.zIndex = String(zCounter);
+    }
+
+    // make an element draggable by its header (.info-box-header)
+    function makeElementDraggable(el) {
+      const header = el.querySelector('.info-box-header');
+      if (!header) return;
+
+      let isDown = false, startX = 0, startY = 0, startLeft = 0, startTop = 0;
+
+      header.addEventListener('mousedown', (e) => {
+        isDown = true;
+        bringToFront(el);
+        startX = e.clientX;
+        startY = e.clientY;
+        startLeft = parseInt(el.style.left || 0, 10);
+        startTop  = parseInt(el.style.top || 0, 10);
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onUp, { once: true });
+        e.preventDefault();
+      });
+
+      function onMouseMove(e) {
+        if (!isDown) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        el.style.left = (startLeft + dx) + 'px';
+        el.style.top  = (startTop + dy) + 'px';
+      }
+
+      function onUp() {
+        isDown = false;
+        document.removeEventListener('mousemove', onMouseMove);
+      }
+    }
+
+    // Close all boxes when clicking outside map + markers (optional)
+    document.addEventListener('click', (e) => {
+      // clicking outside markers does nothing by default; keep boxes unless user closes
+    });
+
+    /*********************************************************
+     * Initialize
+     *********************************************************/
+    window.addEventListener('load', () => {
+      renderMarkers();
+    });
+
+    // Optional: keyboard shortcut ESC to close topmost info box
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        // remove topmost info-box if any
+        const boxes = Array.from(document.querySelectorAll('.info-box'));
+        if (boxes.length) {
+          boxes[boxes.length - 1].remove();
+        }
+      }
+    });
+  </script>
+</body>
+</html>
